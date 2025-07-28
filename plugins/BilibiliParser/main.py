@@ -305,7 +305,7 @@ class BilibiliParser(BasePlugin):
         return None
 
     async def process_bilibili_video(self, msg, video_id):
-        """处理Bilibili视频信息"""
+        """处理Bilibili视频信息，展示作者、播放量、弹幕、点赞、投币、收藏、评论等"""
         api_url = f"https://api.bilibili.com/x/web-interface/view?{video_id}"
         headers = {
             "User-Agent": (
@@ -331,11 +331,31 @@ class BilibiliParser(BasePlugin):
                             desc = desc[:100] + "..."
                         cover_url = video_info.get('pic', '')
                         stats = video_info.get('stat', {})
+                        owner = video_info.get('owner', {})
+                        author = owner.get('name', '')
+                        play = stats.get('view', 0)
+                        danmaku = stats.get('danmaku', 0)
+                        like = stats.get('like', 0)
+                        coin = stats.get('coin', 0)
+                        favorite = stats.get('favorite', 0)
+                        reply = stats.get('reply', 0)
+
+                        # 格式化数字（如85.5万）
+                        def fmt_num(n):
+                            try:
+                                n = int(n)
+                                if n >= 10000:
+                                    return f"{n/10000:.1f}万"
+                                return str(n)
+                            except Exception:
+                                return str(n)
+
                         info_text = (
-                            f"【{title}】\n"
-                            f"简介: {desc}\n"
-                            f"播放: {stats.get('view', 0)} | 点赞: {stats.get('like', 0)}\n"
-                            f"收藏: {stats.get('favorite', 0)} | 投币: {stats.get('coin', 0)}"
+                            f"作者: {author}\n"
+                            f"播放: {fmt_num(play)} | 弹幕: {fmt_num(danmaku)}\n"
+                            f"点赞: {fmt_num(like)} | 投币: {fmt_num(coin)}\n"
+                            f"收藏: {fmt_num(favorite)} | 评论: {fmt_num(reply)}\n"
+                            f"标题: {title}\n"
                         )
                         message = MessageChain([
                             Image(cover_url),
