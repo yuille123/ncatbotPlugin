@@ -1,3 +1,2 @@
 # 插件依赖项
 jmcomic
-Pillow
