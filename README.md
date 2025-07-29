@@ -9,7 +9,7 @@ JmComicPlugin 是一个用于 QQ 机器人（ncatbot 框架）的禁漫本子下
 - 已下载的 PDF 会直接发送，无需重复下载
 
 ## 安装依赖
-在插件目录下运行：
+在插件目录 `plugins/JmComicPlugin` 下运行：
 
 ```bash
 pip install -r requirements.txt
@@ -24,14 +24,11 @@ pip install -r requirements.txt
    ```
    /jm <本子ID>
    ```
-   例如：`/jm 422866`
+   例如：`/jm 114514`
 3. 插件会自动下载本子并发送 PDF 文件。
    - 若 PDF 已存在，则直接发送，无需重复下载。
-   - 若无 PDF，则自动查找图片并用 img2pdf 合成。
 
 ## 常见问题
-- **img2pdf 无法导入？**
-  请先运行 `pip install img2pdf`。
 - **未找到 PDF 或图片？**
   请检查 `option.yml` 的 `base_dir` 路径与实际下载目录是否一致。
 - **下载失败或网络问题？**
@@ -42,6 +39,6 @@ pip install -r requirements.txt
 
 ## 鸣谢
 
-- 本插件基于 [jmcomic](https://github.com/hect0x7/JMComic-Crawler-Python) 项目开发
-- 感谢 ncatbot、img2pdf 及所有相关开源社区。
+- 本插件基于 [JMComic-Crawler-Python](https://github.com/hect0x7/JMComic-Crawler-Python) 项目开发
+- 感谢 [NcatBot](https://github.com/liyihao1110/NcatBot)
 
