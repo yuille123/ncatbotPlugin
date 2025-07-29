@@ -1,0 +1,6 @@
+
+download:
+  image:
+    suffix: .png
+  chapter:
+    save_as: pdf

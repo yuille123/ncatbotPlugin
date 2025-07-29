@@ -355,7 +355,7 @@ class BilibiliParser(BasePlugin):
                             f"播放: {fmt_num(play)} | 弹幕: {fmt_num(danmaku)}\n"
                             f"点赞: {fmt_num(like)} | 投币: {fmt_num(coin)}\n"
                             f"收藏: {fmt_num(favorite)} | 评论: {fmt_num(reply)}\n"
-                            f"标题: {title}\n"
+                            f"标题: {title}"
                         )
                         message = MessageChain([
                             Image(cover_url),
