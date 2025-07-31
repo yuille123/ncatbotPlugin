@@ -8,7 +8,7 @@ bot = CompatibleEnrollment
 class JmComicPlugin(BasePlugin):
     name = "JmComicPlugin"
     version = "0.0.1"
-    author = "Your Name"
+    author = "FunEnn"
     info = "禁漫本子下载插件，支持通过/jm命令下载本子并发送PDF文件"
     dependencies = {}
 
