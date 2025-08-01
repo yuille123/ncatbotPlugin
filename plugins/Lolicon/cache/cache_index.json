@@ -1,1 +1,12 @@
-{}
+{
+  "https://i.pixiv.re/img-master/img/2023/07/16/00/00/46/109946024_p0_master1200.jpg": {
+    "path": "plugins\\Lolicon\\cache\\60db5eafae41f545bfaf147e92dd9f4c.jpg",
+    "timestamp": 1754027921.9938262,
+    "size": 859307
+  },
+  "https://i.pixiv.re/img-master/img/2025/06/05/00/00/05/131184735_p0_master1200.jpg": {
+    "path": "plugins\\Lolicon\\cache\\b844eefa40ec0727bb3fdf968334fe12.jpg",
+    "timestamp": 1754028042.992783,
+    "size": 1263295
+  }
+}
