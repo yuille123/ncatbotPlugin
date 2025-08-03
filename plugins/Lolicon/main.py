@@ -1,4 +1,4 @@
-from ncatbot.plugin import BasePlugin, CompatibleEnrollment, get_global_access_controller
+from ncatbot.plugin import BasePlugin, get_global_access_controller
 from ncatbot.core.message import BaseMessage
 from ncatbot.core import MessageChain, Image
 from ncatbot.utils import get_log
@@ -27,7 +27,6 @@ class Lolicon(BasePlugin):
         self.session = None
     
     def _load_cache_index(self) -> Dict:
-        """加载缓存索引"""
         if self.cache_index_file.exists():
             try:
                 with open(self.cache_index_file, 'r', encoding='utf-8') as f:
@@ -37,7 +36,6 @@ class Lolicon(BasePlugin):
         return {}
     
     def _save_cache_index(self):
-        """保存缓存索引"""
         try:
             with open(self.cache_index_file, 'w', encoding='utf-8') as f:
                 json.dump(self.cache_index, f, ensure_ascii=False, indent=2)
@@ -45,22 +43,18 @@ class Lolicon(BasePlugin):
             LOG.error(f"保存缓存索引失败: {e}")
     
     def _get_cache_path(self, url: str) -> Path:
-        """获取缓存文件路径"""
         url_hash = hashlib.md5(url.encode()).hexdigest()
         return self.cache_dir / f"{url_hash}.jpg"
     
     async def _download_image(self, url: str) -> Optional[Path]:
-        """下载图片到缓存"""
         cache_path = self._get_cache_path(url)
         
-        # 如果缓存存在且未过期，直接返回
         if cache_path.exists():
             cache_time = cache_path.stat().st_mtime
             if time.time() - cache_time < self.config.get("cache_expire", 86400):
                 return cache_path
         
-        # 添加重试机制
-        max_retries = 2
+        max_retries = 1
         for retry in range(max_retries):
             try:
                 if not self.session:
@@ -71,7 +65,7 @@ class Lolicon(BasePlugin):
                     "Referer": "https://www.pixiv.net/"
                 }
                 
-                timeout = aiohttp.ClientTimeout(total=self.config.get("download_timeout", 20), connect=5)
+                timeout = aiohttp.ClientTimeout(total=self.config.get("download_timeout", 10), connect=3)
                 async with self.session.get(url, headers=headers, timeout=timeout) as response:
                     if response.status == 200:
                         content = await response.read()
@@ -95,17 +89,29 @@ class Lolicon(BasePlugin):
                 LOG.warning(f"下载图片超时 (重试 {retry + 1}/{max_retries}): {url}")
                 if retry == max_retries - 1:
                     break
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
             except Exception as e:
                 LOG.error(f"下载图片异常 (重试 {retry + 1}/{max_retries}): {url}, 错误: {e}")
                 if retry == max_retries - 1:
                     break
-                await asyncio.sleep(1)
+                await asyncio.sleep(0.5)
         
         return None
     
+    async def _download_images_concurrent(self, urls: List[str]) -> List[Optional[Path]]:
+        async def download_single(url: str) -> Optional[Path]:
+            return await self._download_image(url)
+        
+        semaphore = asyncio.Semaphore(5)
+        
+        async def download_with_semaphore(url: str) -> Optional[Path]:
+            async with semaphore:
+                return await download_single(url)
+        
+        tasks = [download_with_semaphore(url) for url in urls]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+    
     async def _call_lolicon_api(self, count: int = 1, r18: int = 0, tags: List[str] = None) -> List[Dict]:
-        """调用 Lolicon API v2"""
         api_url = "https://api.lolicon.app/setu/v2"
         params = {
             "r18": r18,
@@ -116,15 +122,12 @@ class Lolicon(BasePlugin):
         if not tags:
             tags = ["萝莉"]
         
-        # 限制最多3个标签
         tags = tags[:3]
         
-        # 使用多个tag参数，实现AND规则
         for tag in tags:
             params[f"tag"] = tag
         
-        # 添加重试机制
-        max_retries = 3
+        max_retries = 2
         for retry in range(max_retries):
             try:
                 if not self.session:
@@ -132,7 +135,7 @@ class Lolicon(BasePlugin):
                 
                 headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
                 
-                timeout = aiohttp.ClientTimeout(total=self.config.get("api_timeout", 30), connect=10)
+                timeout = aiohttp.ClientTimeout(total=self.config.get("api_timeout", 15), connect=5)
                 async with self.session.get(api_url, params=params, headers=headers, timeout=timeout) as response:
                     if response.status == 200:
                         data = await response.json()
@@ -151,17 +154,16 @@ class Lolicon(BasePlugin):
                 LOG.error(f"API 请求超时 (重试 {retry + 1}/{max_retries})")
                 if retry == max_retries - 1:
                     return []
-                await asyncio.sleep(2)  # 等待2秒后重试
+                await asyncio.sleep(1)
             except Exception as e:
                 LOG.error(f"调用 API 异常 (重试 {retry + 1}/{max_retries}): {e}")
                 if retry == max_retries - 1:
                     return []
-                await asyncio.sleep(1)  # 等待1秒后重试
+                await asyncio.sleep(0.5)
         
         return []
     
     def _can_access_r18(self, msg: BaseMessage) -> bool:
-        """检查是否有权限访问 R18 内容"""
         if not hasattr(msg, "group_id"):
             return True
         
@@ -173,12 +175,10 @@ class Lolicon(BasePlugin):
         return False
     
     async def on_load(self):
-        # 注册配置
         self.register_config("cache_expire", 86400, description="缓存过期时间(秒)", value_type="int")
         self.register_config("batch", 5, description="一批发送的图片数量", value_type="int")
         self.register_config("lim_f", 3, description="不使用转发的阈值", value_type="int")
-        self.register_config("lim_u", 10, description="普通用户一次请求最大发送数量", value_type="int")
-        self.register_config("lim_a", 30, description="超级用户一次请求最大发送数量", value_type="int")
+        self.register_config("lim_u", 10, description="用户一次请求最大发送数量", value_type="int")
         self.register_config("enable_r18", False, description="是否启用 R18 内容", value_type="bool")
         self.register_config("r18_private_only", True, description="R18 内容是否仅限私聊", value_type="bool")
         self.register_config("api_timeout", 30, description="API请求超时时间(秒)", value_type="int")
@@ -186,7 +186,6 @@ class Lolicon(BasePlugin):
         self.register_config("send_retry_count", 3, description="发送消息重试次数", value_type="int")
         self.register_config("batch_delay", 0.5, description="批次间延迟时间(秒)", value_type="float")
         
-        # 注册命令
         self.register_user_func("/loli", self.loli, prefix="/loli", description="发送随机二次元图片")
         self.register_user_func("/r18", self.r18, prefix="/r18", description="发送 R18 二次元图片(需要权限)")
         
@@ -198,7 +197,6 @@ class Lolicon(BasePlugin):
         print(f"{self.name} 插件已加载")
     
     async def status(self, msg: BaseMessage):
-        """查看插件状态"""
         cache_size = sum(item.get("size", 0) for item in self.cache_index.values())
         cache_count = len(self.cache_index)
         
@@ -206,12 +204,43 @@ class Lolicon(BasePlugin):
         status_text += f"缓存图片数量: {cache_count} 张\n"
         status_text += f"缓存大小: {cache_size / 1024 / 1024:.2f} MB\n"
         status_text += f"R18 功能启用: {'是' if self.config['enable_r18'] else '否'}\n"
-        status_text += f"R18 仅限私聊: {'是' if self.config['r18_private_only'] else '否'}"
+        status_text += f"R18 仅限私聊: {'是' if self.config['r18_private_only'] else '否'}\n"
+        
+        api_status = await self._check_api_status()
+        status_text += f"API接口状态: {api_status}"
         
         await msg.reply(status_text)
     
+    async def _check_api_status(self) -> str:
+        try:
+            if not self.session:
+                self.session = aiohttp.ClientSession()
+            
+            api_url = "https://api.lolicon.app/setu/v2"
+            params = {"r18": 0, "num": 1, "size": "regular"}
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            
+            start_time = time.time()
+            timeout = aiohttp.ClientTimeout(total=10, connect=5)
+            
+            async with self.session.get(api_url, params=params, headers=headers, timeout=timeout) as response:
+                response_time = time.time() - start_time
+                
+                if response.status == 200:
+                    data = await response.json()
+                    if data.get("error") == "" and data.get("data"):
+                        return f"✅ 正常 (响应时间: {response_time:.2f}s)"
+                    else:
+                        return f"❌ API返回错误: {data.get('error', '未知错误')}"
+                else:
+                    return f"❌ HTTP错误: {response.status}"
+                    
+        except asyncio.TimeoutError:
+            return "❌ 连接超时"
+        except Exception as e:
+            return f"❌ 连接失败: {str(e)}"
+    
     async def clear_cache(self, msg: BaseMessage):
-        """清理缓存"""
         try:
             for cache_path in self.cache_dir.glob("*.jpg"):
                 cache_path.unlink()
@@ -225,7 +254,6 @@ class Lolicon(BasePlugin):
             await msg.reply(f"清理缓存失败: {e}")
     
     async def enable_r18(self, msg: BaseMessage):
-        """启用R18功能"""
         try:
             self.config["enable_r18"] = True
             await msg.reply("✅ R18 功能已启用")
@@ -234,7 +262,6 @@ class Lolicon(BasePlugin):
             await msg.reply(f"启用R18功能失败: {e}")
     
     async def disable_r18(self, msg: BaseMessage):
-        """禁用R18功能"""
         try:
             self.config["enable_r18"] = False
             await msg.reply("❌ R18 功能已禁用")
@@ -243,25 +270,38 @@ class Lolicon(BasePlugin):
             await msg.reply(f"禁用R18功能失败: {e}")
     
     async def send_images(self, msg: BaseMessage, images_data: List[Dict], count: int):
-        """发送图片"""
-        msg_chains = []
-        failed_count = 0
-        
+        urls = []
         for image_data in images_data:
             url = image_data.get("urls", {}).get("regular", "")
             if url:
-                cache_path = await self._download_image(url)
-                if cache_path:
-                    msg_chains.append(Image(str(cache_path)))
-                else:
-                    failed_count += 1
+                urls.append(url)
+        
+        if not urls:
+            await msg.reply("没有可用的图片链接")
+            return
+        
+        await msg.reply("正在获取图片，请稍候...")
+        cache_paths = await self._download_images_concurrent(urls)
+        
+        msg_chains = []
+        failed_count = 0
+        
+        for i, cache_path in enumerate(cache_paths):
+            if isinstance(cache_path, Exception):
+                LOG.error(f"下载图片异常: {cache_path}")
+                failed_count += 1
+                continue
+                
+            if cache_path and cache_path.exists():
+                msg_chains.append(Image(str(cache_path)))
+            else:
+                failed_count += 1
         
         if not msg_chains:
             await msg.reply("所有图片下载失败，请稍后重试")
             return
         
-        # 分批发送图片，避免超时
-        batch_size = self.config.get("batch", 5)
+        batch_size = min(self.config.get("batch", 5), len(msg_chains))
         total_sent = 0
         total_failed = 0
         
@@ -269,8 +309,7 @@ class Lolicon(BasePlugin):
             batch = msg_chains[i:i + batch_size]
             msg_chain = MessageChain(batch)
             
-            # 添加重试机制
-            max_retries = self.config.get("send_retry_count", 3)
+            max_retries = 2
             for retry in range(max_retries):
                 try:
                     if hasattr(msg, "group_id"):
@@ -287,16 +326,15 @@ class Lolicon(BasePlugin):
                         total_failed += len(batch)
                         LOG.error(f"发送图片最终失败: {e}")
                     else:
-                        await asyncio.sleep(1)  # 等待1秒后重试
+                        await asyncio.sleep(0.5)
             
-            # 批次间延迟，避免频率限制
             if i + batch_size < len(msg_chains):
-                await asyncio.sleep(self.config.get("batch_delay", 0.5))
+                await asyncio.sleep(self.config.get("batch_delay", 0.2))
         
-
+        if failed_count > 0:
+            await msg.reply(f"发送完成！成功: {total_sent}张，失败: {failed_count}张")
     
     async def loli(self, msg: BaseMessage):
-        """发送普通二次元图片"""
         parts = msg.raw_message.split()
         count = 1
         tags = []
@@ -305,11 +343,11 @@ class Lolicon(BasePlugin):
             try:
                 count = int(parts[1])
                 if len(parts) > 2:
-                    tags.extend(parts[2:])
+                    tags = [parts[2]]
             except ValueError:
-                tags.extend(parts[1:])
+                tags = [parts[1]] if parts[1] else []
         
-        max_count = self.config["lim_a"] if get_global_access_controller().user_has_role(str(msg.user_id), "root") else self.config["lim_u"]
+        max_count = self.config["lim_u"]
         count = max(1, min(max_count, count))
         
         images_data = await self._call_lolicon_api(count=count, r18=0, tags=tags)
@@ -321,7 +359,6 @@ class Lolicon(BasePlugin):
         await self.send_images(msg, images_data, count)
     
     async def r18(self, msg: BaseMessage):
-        """发送 R18 二次元图片"""
         if not self.config.get("enable_r18", False):
             await msg.reply("R18 功能未启用")
             return
@@ -341,11 +378,11 @@ class Lolicon(BasePlugin):
             try:
                 count = int(parts[1])
                 if len(parts) > 2:
-                    tags.extend(parts[2:])
+                    tags = [parts[2]]
             except ValueError:
-                tags.extend(parts[1:])
+                tags = [parts[1]] if parts[1] else []
         
-        max_count = self.config["lim_a"] if get_global_access_controller().user_has_role(str(msg.user_id), "root") else self.config["lim_u"]
+        max_count = self.config["lim_u"]
         count = max(1, min(max_count, count))
         
         images_data = await self._call_lolicon_api(count=count, r18=1, tags=tags)
@@ -357,7 +394,6 @@ class Lolicon(BasePlugin):
         await self.send_images(msg, images_data, count)
     
     async def on_unload(self):
-        """插件卸载时清理资源"""
         if self.session:
             await self.session.close()
             
