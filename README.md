@@ -83,12 +83,6 @@ python main.py
 ### BilibiliParser命令
 - `/bparser_login` - 登录B站账号(私聊)
 
-## 🔧 配置说明
-
-各插件的详细配置请参考对应插件的README文档：
-- [JmComicPlugin配置](./plugins/JmComicPlugin/README.md)
-- [Lolicon配置](./plugins/Lolicon/README.md)
-- [BilibiliParser配置](./plugins/BilibiliParser/README.md)
 
 ## 📝 注意事项
 
