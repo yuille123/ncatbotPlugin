@@ -15,7 +15,7 @@ LOG = get_log("Lolicon")
 class Lolicon(BasePlugin):
     name = "Lolicon"
     version = "1.0.0"
-    author = "huan-yp"
+    author = "FunEnn"
     description = "调用 Lolicon API v2 发送随机二次元图片"
     
     def __init__(self, **kwargs):
@@ -44,14 +44,18 @@ class Lolicon(BasePlugin):
     
     def _get_cache_path(self, url: str) -> Path:
         url_hash = hashlib.md5(url.encode()).hexdigest()
-        return self.cache_dir / f"{url_hash}.jpg"
+        # 添加时间戳避免缓存冲突
+        timestamp = int(time.time() / 3600)  # 每小时更新一次
+        return self.cache_dir / f"{url_hash}_{timestamp}.jpg"
     
     async def _download_image(self, url: str) -> Optional[Path]:
         cache_path = self._get_cache_path(url)
         
+        # 缩短缓存过期时间，增加随机性
+        cache_expire = self.config.get("cache_expire", 3600)  # 改为1小时
         if cache_path.exists():
             cache_time = cache_path.stat().st_mtime
-            if time.time() - cache_time < self.config.get("cache_expire", 86400):
+            if time.time() - cache_time < cache_expire:
                 return cache_path
         
         max_retries = 1
@@ -127,6 +131,11 @@ class Lolicon(BasePlugin):
         for tag in tags:
             params[f"tag"] = tag
         
+        # 添加随机参数避免重复
+        import random
+        params["uid"] = random.randint(1, 999999)
+        params["excludeAI"] = 1
+        
         max_retries = 2
         for retry in range(max_retries):
             try:
@@ -175,7 +184,10 @@ class Lolicon(BasePlugin):
         return False
     
     async def on_load(self):
-        self.register_config("cache_expire", 86400, description="缓存过期时间(秒)", value_type="int")
+        # 自动清理过期缓存
+        await self._cleanup_expired_cache()
+        
+        self.register_config("cache_expire", 3600, description="缓存过期时间(秒)", value_type="int")
         self.register_config("batch", 5, description="一批发送的图片数量", value_type="int")
         self.register_config("lim_f", 3, description="不使用转发的阈值", value_type="int")
         self.register_config("lim_u", 10, description="用户一次请求最大发送数量", value_type="int")
@@ -195,6 +207,27 @@ class Lolicon(BasePlugin):
         self.register_admin_func("disable_r18", self.disable_r18, permission_raise=True, description="禁用R18功能")
         
         print(f"{self.name} 插件已加载")
+    
+    async def _cleanup_expired_cache(self):
+        """清理过期缓存"""
+        try:
+            cache_expire = self.config.get("cache_expire", 3600)
+            current_time = time.time()
+            cleaned_count = 0
+            
+            for cache_path in self.cache_dir.glob("*.jpg"):
+                try:
+                    cache_time = cache_path.stat().st_mtime
+                    if current_time - cache_time > cache_expire:
+                        cache_path.unlink()
+                        cleaned_count += 1
+                except Exception:
+                    continue
+            
+            if cleaned_count > 0:
+                LOG.info(f"自动清理了 {cleaned_count} 个过期缓存文件")
+        except Exception as e:
+            LOG.error(f"自动清理缓存失败: {e}")
     
     async def status(self, msg: BaseMessage):
         cache_size = sum(item.get("size", 0) for item in self.cache_index.values())
@@ -242,6 +275,7 @@ class Lolicon(BasePlugin):
     
     async def clear_cache(self, msg: BaseMessage):
         try:
+            # 清理所有缓存文件，包括带时间戳的文件
             for cache_path in self.cache_dir.glob("*.jpg"):
                 cache_path.unlink()
             
