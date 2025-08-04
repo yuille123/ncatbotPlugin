@@ -33,6 +33,8 @@ pip install -r requirements.txt
 - `download_timeout`: 图片下载超时时间(秒)，默认 10
 - `send_retry_count`: 发送消息重试次数，默认 2
 - `batch_delay`: 批次间延迟时间(秒)，默认 0.2
+- `enable_anti_duplicate`: 是否启用防重复机制，默认 True
+- `max_anti_duplicate_retries`: 防重复重试次数，默认 5
 
 ### 启用 R18 功能
 
@@ -75,6 +77,7 @@ pip install -r requirements.txt
 - `/enable_r18` - 启用R18功能
 - `/disable_r18` - 禁用R18功能
 
+
 ### 使用限制
 
 - 所有用户一次最多可请求 10 张图片
@@ -94,10 +97,9 @@ pip install -r requirements.txt
 - 自动清理过期缓存文件
 
 ### 3. 防重复机制
-- 添加随机UID参数避免API返回重复图片
-- 基于时间戳的缓存文件命名，每小时更新
-- 缩短缓存过期时间，增加图片多样性
-- 自动清理过期缓存，保持新鲜度
+- 智能防重复机制，避免获取相同图片
+- 维护已发送图片记录，自动过滤重复图片
+- 支持配置防重复重试次数
 
 ### 4. 超时优化
 - API请求超时：15秒
@@ -141,6 +143,7 @@ pip install -r requirements.txt
 /clear_cache            # 清理图片缓存
 /enable_r18             # 启用R18功能
 /disable_r18            # 禁用R18功能
+
 ```
 
 ## 注意事项
@@ -152,4 +155,4 @@ pip install -r requirements.txt
 5. **R18内容**：R18 内容请遵守相关法律法规
 6. **缓存管理**：建议定期清理缓存以节省存储空间
 7. **版权尊重**：图片版权归原作者所有，请尊重版权
-8. **防重复机制**：插件已内置防重复机制，减少获取相同图片的概率 
+8. **防重复机制**：插件已内置智能防重复机制，自动记录已发送图片，避免重复获取相同图片 

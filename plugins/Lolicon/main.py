@@ -24,6 +24,10 @@ class Lolicon(BasePlugin):
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.cache_index_file = self.cache_dir / "cache_index.json"
         self.cache_index = self._load_cache_index()
+        
+        # 防重复机制相关
+        self.sent_images_file = self.cache_dir / "sent_images.json"
+        self.sent_images = self._load_sent_images()
         self.session = None
     
     def _load_cache_index(self) -> Dict:
@@ -42,20 +46,45 @@ class Lolicon(BasePlugin):
         except Exception as e:
             LOG.error(f"保存缓存索引失败: {e}")
     
+    def _load_sent_images(self) -> Dict:
+        """加载已发送图片记录"""
+        if self.sent_images_file.exists():
+            try:
+                with open(self.sent_images_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception as e:
+                LOG.error(f"加载已发送图片记录失败: {e}")
+        return {}
+    
+    def _save_sent_images(self):
+        """保存已发送图片记录"""
+        try:
+            with open(self.sent_images_file, 'w', encoding='utf-8') as f:
+                json.dump(self.sent_images, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            LOG.error(f"保存已发送图片记录失败: {e}")
+    
+    def _is_image_sent(self, image_id: str) -> bool:
+        """检查图片是否已经发送过"""
+        return image_id in self.sent_images
+    
+    def _mark_image_sent(self, image_id: str):
+        """标记图片为已发送"""
+        self.sent_images[image_id] = time.time()
+        self._save_sent_images()
+    
+
+    
     def _get_cache_path(self, url: str) -> Path:
         url_hash = hashlib.md5(url.encode()).hexdigest()
-        # 添加时间戳避免缓存冲突
-        timestamp = int(time.time() / 3600)  # 每小时更新一次
-        return self.cache_dir / f"{url_hash}_{timestamp}.jpg"
+        return self.cache_dir / f"{url_hash}.jpg"
     
     async def _download_image(self, url: str) -> Optional[Path]:
         cache_path = self._get_cache_path(url)
         
-        # 缩短缓存过期时间，增加随机性
-        cache_expire = self.config.get("cache_expire", 3600)  # 改为1小时
         if cache_path.exists():
             cache_time = cache_path.stat().st_mtime
-            if time.time() - cache_time < cache_expire:
+            if time.time() - cache_time < self.config.get("cache_expire", 86400):
                 return cache_path
         
         max_retries = 1
@@ -131,10 +160,16 @@ class Lolicon(BasePlugin):
         for tag in tags:
             params[f"tag"] = tag
         
-        # 添加随机参数避免重复
-        import random
-        params["uid"] = random.randint(1, 999999)
-        params["excludeAI"] = 1
+        # 防重复机制
+        enable_anti_duplicate = self.config.get("enable_anti_duplicate", True)
+        max_anti_duplicate_retries = self.config.get("max_anti_duplicate_retries", 5)
+        
+        if enable_anti_duplicate:
+            # 请求更多图片以确保有足够的非重复图片
+            request_count = min(count * 2, 20)  # 最多请求20张
+            params["num"] = request_count
+        else:
+            request_count = count
         
         max_retries = 2
         for retry in range(max_retries):
@@ -149,7 +184,47 @@ class Lolicon(BasePlugin):
                     if response.status == 200:
                         data = await response.json()
                         if data.get("error") == "":
-                            return data.get("data", [])
+                            images_data = data.get("data", [])
+                            
+                            if enable_anti_duplicate:
+                                # 过滤掉已发送的图片
+                                unique_images = []
+                                for image_data in images_data:
+                                    image_id = str(image_data.get("pid", "")) + "_" + str(image_data.get("uid", ""))
+                                    if not self._is_image_sent(image_id):
+                                        unique_images.append(image_data)
+                                
+                                # 如果非重复图片不够，尝试重新请求
+                                if len(unique_images) < count:
+                                    LOG.info(f"防重复机制：请求{len(images_data)}张，非重复{len(unique_images)}张，需要{count}张")
+                                    
+                                    # 尝试多次请求直到获得足够的非重复图片
+                                    for anti_retry in range(max_anti_duplicate_retries):
+                                        if len(unique_images) >= count:
+                                            break
+                                            
+                                        # 重新请求更多图片
+                                        additional_count = min((count - len(unique_images)) * 2, 10)
+                                        params["num"] = additional_count
+                                        
+                                        try:
+                                            async with self.session.get(api_url, params=params, headers=headers, timeout=timeout) as additional_response:
+                                                if additional_response.status == 200:
+                                                    additional_data = await additional_response.json()
+                                                    if additional_data.get("error") == "":
+                                                        additional_images = additional_data.get("data", [])
+                                                        
+                                                        for image_data in additional_images:
+                                                            image_id = str(image_data.get("pid", "")) + "_" + str(image_data.get("uid", ""))
+                                                            if not self._is_image_sent(image_id) and len(unique_images) < count:
+                                                                unique_images.append(image_data)
+                                        except Exception as e:
+                                            LOG.warning(f"防重复重试请求失败: {e}")
+                                            break
+                                
+                                return unique_images[:count]
+                            else:
+                                return images_data[:count]
                         else:
                             LOG.error(f"API 返回错误: {data.get('error')}")
                             if retry == max_retries - 1:
@@ -184,10 +259,7 @@ class Lolicon(BasePlugin):
         return False
     
     async def on_load(self):
-        # 自动清理过期缓存
-        await self._cleanup_expired_cache()
-        
-        self.register_config("cache_expire", 3600, description="缓存过期时间(秒)", value_type="int")
+        self.register_config("cache_expire", 86400, description="缓存过期时间(秒)", value_type="int")
         self.register_config("batch", 5, description="一批发送的图片数量", value_type="int")
         self.register_config("lim_f", 3, description="不使用转发的阈值", value_type="int")
         self.register_config("lim_u", 10, description="用户一次请求最大发送数量", value_type="int")
@@ -198,6 +270,10 @@ class Lolicon(BasePlugin):
         self.register_config("send_retry_count", 3, description="发送消息重试次数", value_type="int")
         self.register_config("batch_delay", 0.5, description="批次间延迟时间(秒)", value_type="float")
         
+        # 防重复机制配置
+        self.register_config("enable_anti_duplicate", True, description="是否启用防重复机制", value_type="bool")
+        self.register_config("max_anti_duplicate_retries", 5, description="防重复重试次数", value_type="int")
+        
         self.register_user_func("/loli", self.loli, prefix="/loli", description="发送随机二次元图片")
         self.register_user_func("/r18", self.r18, prefix="/r18", description="发送 R18 二次元图片(需要权限)")
         
@@ -205,29 +281,9 @@ class Lolicon(BasePlugin):
         self.register_admin_func("status", self.status, permission_raise=True, description="查看插件状态")
         self.register_admin_func("enable_r18", self.enable_r18, permission_raise=True, description="启用R18功能")
         self.register_admin_func("disable_r18", self.disable_r18, permission_raise=True, description="禁用R18功能")
+
         
         print(f"{self.name} 插件已加载")
-    
-    async def _cleanup_expired_cache(self):
-        """清理过期缓存"""
-        try:
-            cache_expire = self.config.get("cache_expire", 3600)
-            current_time = time.time()
-            cleaned_count = 0
-            
-            for cache_path in self.cache_dir.glob("*.jpg"):
-                try:
-                    cache_time = cache_path.stat().st_mtime
-                    if current_time - cache_time > cache_expire:
-                        cache_path.unlink()
-                        cleaned_count += 1
-                except Exception:
-                    continue
-            
-            if cleaned_count > 0:
-                LOG.info(f"自动清理了 {cleaned_count} 个过期缓存文件")
-        except Exception as e:
-            LOG.error(f"自动清理缓存失败: {e}")
     
     async def status(self, msg: BaseMessage):
         cache_size = sum(item.get("size", 0) for item in self.cache_index.values())
@@ -275,7 +331,6 @@ class Lolicon(BasePlugin):
     
     async def clear_cache(self, msg: BaseMessage):
         try:
-            # 清理所有缓存文件，包括带时间戳的文件
             for cache_path in self.cache_dir.glob("*.jpg"):
                 cache_path.unlink()
             
@@ -303,12 +358,19 @@ class Lolicon(BasePlugin):
             LOG.error(f"禁用R18功能失败: {e}")
             await msg.reply(f"禁用R18功能失败: {e}")
     
+
+    
     async def send_images(self, msg: BaseMessage, images_data: List[Dict], count: int):
         urls = []
+        image_ids = []  # 用于防重复机制
+        
         for image_data in images_data:
             url = image_data.get("urls", {}).get("regular", "")
             if url:
                 urls.append(url)
+                # 生成图片ID用于防重复
+                image_id = str(image_data.get("pid", "")) + "_" + str(image_data.get("uid", ""))
+                image_ids.append(image_id)
         
         if not urls:
             await msg.reply("没有可用的图片链接")
@@ -319,6 +381,7 @@ class Lolicon(BasePlugin):
         
         msg_chains = []
         failed_count = 0
+        sent_image_ids = []  # 记录成功发送的图片ID
         
         for i, cache_path in enumerate(cache_paths):
             if isinstance(cache_path, Exception):
@@ -328,6 +391,9 @@ class Lolicon(BasePlugin):
                 
             if cache_path and cache_path.exists():
                 msg_chains.append(Image(str(cache_path)))
+                # 记录成功下载的图片ID
+                if i < len(image_ids):
+                    sent_image_ids.append(image_ids[i])
             else:
                 failed_count += 1
         
@@ -350,6 +416,13 @@ class Lolicon(BasePlugin):
                         await self.api.post_group_msg(msg.group_id, rtf=msg_chain)
                     else:
                         await self.api.post_private_msg(msg.user_id, rtf=msg_chain)
+                    
+                    # 标记成功发送的图片为已发送
+                    batch_start = i
+                    batch_end = min(i + batch_size, len(sent_image_ids))
+                    for j in range(batch_start, batch_end):
+                        if j < len(sent_image_ids):
+                            self._mark_image_sent(sent_image_ids[j])
                     
                     total_sent += len(batch)
                     break
