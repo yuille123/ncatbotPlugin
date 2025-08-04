@@ -1,5 +1,5 @@
-# 插件依赖项
-# 例如: requests==2.28.1
+# Plugin dependencies
+# Example: requests==2.28.1
 aiohttp
 cryptography
 jmcomic
