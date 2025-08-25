@@ -1,4 +1,4 @@
-from ncatbot.plugin import BasePlugin, get_global_access_controller
+from ncatbot.plugin import BasePlugin
 from ncatbot.core.message import BaseMessage
 from ncatbot.core import MessageChain, Image
 from ncatbot.utils import get_log
@@ -248,23 +248,18 @@ class Lolicon(BasePlugin):
         return []
     
     def _can_access_r18(self, msg: BaseMessage) -> bool:
-        if not hasattr(msg, "group_id"):
-            return True
+        # 群聊中直接禁止R18内容
+        if hasattr(msg, "group_id"):
+            return False
         
-        access_controller = get_global_access_controller()
-        if access_controller.user_has_role(str(msg.user_id), "root") or \
-           access_controller.user_has_role(str(msg.user_id), "admin"):
-            return True
-        
-        return False
+        # 私聊中允许访问
+        return True
     
     async def on_load(self):
         self.register_config("cache_expire", 86400, description="缓存过期时间(秒)", value_type="int")
         self.register_config("batch", 5, description="一批发送的图片数量", value_type="int")
         self.register_config("lim_f", 3, description="不使用转发的阈值", value_type="int")
         self.register_config("lim_u", 10, description="用户一次请求最大发送数量", value_type="int")
-        self.register_config("enable_r18", False, description="是否启用 R18 内容", value_type="bool")
-        self.register_config("r18_private_only", True, description="R18 内容是否仅限私聊", value_type="bool")
         self.register_config("api_timeout", 30, description="API请求超时时间(秒)", value_type="int")
         self.register_config("download_timeout", 20, description="图片下载超时时间(秒)", value_type="int")
         self.register_config("send_retry_count", 3, description="发送消息重试次数", value_type="int")
@@ -275,12 +270,10 @@ class Lolicon(BasePlugin):
         self.register_config("max_anti_duplicate_retries", 5, description="防重复重试次数", value_type="int")
         
         self.register_user_func("/loli", self.loli, prefix="/loli", description="发送随机二次元图片")
-        self.register_user_func("/r18", self.r18, prefix="/r18", description="发送 R18 二次元图片(需要权限)")
+        self.register_user_func("/r18", self.r18, prefix="/r18", description="发送 R18 二次元图片(仅限私聊)")
         
         self.register_admin_func("clear_cache", self.clear_cache, permission_raise=True, description="清理图片缓存")
         self.register_admin_func("status", self.status, permission_raise=True, description="查看插件状态")
-        self.register_admin_func("enable_r18", self.enable_r18, permission_raise=True, description="启用R18功能")
-        self.register_admin_func("disable_r18", self.disable_r18, permission_raise=True, description="禁用R18功能")
 
         
         print(f"{self.name} 插件已加载")
@@ -292,8 +285,6 @@ class Lolicon(BasePlugin):
         status_text = f"Lolicon 插件状态:\n"
         status_text += f"缓存图片数量: {cache_count} 张\n"
         status_text += f"缓存大小: {cache_size / 1024 / 1024:.2f} MB\n"
-        status_text += f"R18 功能启用: {'是' if self.config['enable_r18'] else '否'}\n"
-        status_text += f"R18 仅限私聊: {'是' if self.config['r18_private_only'] else '否'}\n"
         
         api_status = await self._check_api_status()
         status_text += f"API接口状态: {api_status}"
@@ -341,25 +332,7 @@ class Lolicon(BasePlugin):
         except Exception as e:
             LOG.error(f"清理缓存失败: {e}")
             await msg.reply(f"清理缓存失败: {e}")
-    
-    async def enable_r18(self, msg: BaseMessage):
-        try:
-            self.config["enable_r18"] = True
-            await msg.reply("✅ R18 功能已启用")
-        except Exception as e:
-            LOG.error(f"启用R18功能失败: {e}")
-            await msg.reply(f"启用R18功能失败: {e}")
-    
-    async def disable_r18(self, msg: BaseMessage):
-        try:
-            self.config["enable_r18"] = False
-            await msg.reply("❌ R18 功能已禁用")
-        except Exception as e:
-            LOG.error(f"禁用R18功能失败: {e}")
-            await msg.reply(f"禁用R18功能失败: {e}")
-    
 
-    
     async def send_images(self, msg: BaseMessage, images_data: List[Dict], count: int):
         urls = []
         image_ids = []  # 用于防重复机制
@@ -466,15 +439,9 @@ class Lolicon(BasePlugin):
         await self.send_images(msg, images_data, count)
     
     async def r18(self, msg: BaseMessage):
-        if not self.config.get("enable_r18", False):
-            await msg.reply("R18 功能未启用")
-            return
-        
-        if not self._can_access_r18(msg):
-            if self.config.get("r18_private_only", True):
-                await msg.reply("R18 内容仅限私聊使用")
-            else:
-                await msg.reply("您没有权限访问 R18 内容")
+        # 检查是否为群聊
+        if hasattr(msg, "group_id"):
+            await msg.reply("R18 内容仅限私聊使用，群聊中无法发送")
             return
         
         parts = msg.raw_message.split()
