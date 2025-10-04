@@ -3,6 +3,7 @@ import jmcomic
 from ncatbot.plugin_system import NcatBotPlugin
 from ncatbot.plugin_system import command_registry
 from ncatbot.core.event import BaseMessageEvent
+from ncatbot.core import File
 
 class JmComicPlugin(NcatBotPlugin):
     name = "JmComicPlugin"
@@ -33,9 +34,17 @@ class JmComicPlugin(NcatBotPlugin):
                 self.jm_option.download_album([album_id])
             
             if os.path.exists(pdf_path):
-                await event.reply(f"发送本子 {album_id} 的PDF文件...")
-                await event.reply(f"文件路径: {pdf_path}")
+                await self._send_pdf_file(event, pdf_path)
             else:
                 await event.reply("未找到 PDF 文件，可能下载失败。")
         except Exception as e:
             await event.reply(f"下载过程中发生错误: {str(e)}")
+    
+    async def _send_pdf_file(self, event: BaseMessageEvent, pdf_path: str):
+        """发送 PDF 文件"""
+        try:
+            # 创建文件对象并发送
+            pdf_file = File(pdf_path)
+            await event.reply(pdf_file)
+        except Exception as e:
+            await event.reply(f"发送文件失败: {str(e)}")
