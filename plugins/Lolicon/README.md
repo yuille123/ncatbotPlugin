@@ -49,8 +49,8 @@ pip install -r requirements.txt
 
 ### 管理员命令
 
-- `/status` — 查看插件状态（包含 API 接口可用性与响应时间）
-- `/clear_cache` — 清理图片缓存
+- `/loli_status` 或 `/状态` — 查看插件状态（包含 API 接口可用性与响应时间）
+- `/loli_clear` 或 `/清理缓存` — 清理图片缓存
 
 ### 使用限制
 
@@ -62,7 +62,7 @@ pip install -r requirements.txt
 - 并发下载：最多 5 个并发任务，加快多图获取速度
 - 缓存机制：文件保存于 `plugins/Lolicon/cache/`，索引记录于 `cache_index.json`
 - 超时优化：API/下载独立超时设置，失败时有限重试
-- API 状态检查：`/status` 命令展示接口可用性与响应时间
+- API 状态检查：`/loli_status` 命令展示接口可用性与响应时间
 
 ## API 说明
 
@@ -91,14 +91,16 @@ pip install -r requirements.txt
 
 ### 管理员
 ```
-/status                  # 查看插件状态和 API 状态
-/clear_cache             # 清理图片缓存
+/loli_status             # 查看插件状态和 API 状态
+/状态                    # 查看插件状态和 API 状态（别名）
+/loli_clear              # 清理图片缓存
+/清理缓存                # 清理图片缓存（别名）
 ```
 
 ## 注意事项
 
 1. 只支持单个标签，多个标签时只使用第一个
-2. 可通过 `/status` 检查 API 接口状态
+2. 可通过 `/loli_status` 检查 API 接口状态
 3. 合理使用 API，避免频繁请求
 4. R18 仅限私聊使用
 5. 建议定期清理缓存以节省存储空间

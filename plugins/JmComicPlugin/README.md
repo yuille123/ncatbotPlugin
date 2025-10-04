@@ -1,7 +1,7 @@
 # JmComicPlugin
 
 ## 简介
-JmComicPlugin 是一个用于 QQ 机器人（ncatbot 框架）的禁漫本子下载插件，支持通过 `/jm <本子ID>` 命令下载禁漫本子并自动发送 PDF 文件。
+JmComicPlugin 是一个用于 QQ 机器人（NcatBot 框架）的禁漫本子下载插件，支持通过 `/jm <本子ID>` 命令下载禁漫本子并自动发送 PDF 文件。
 
 ## 主要功能
 - 通过 `/jm <本子ID>` 指令下载禁漫本子
@@ -17,9 +17,10 @@ pip install -r requirements.txt
 
 依赖列表：
 - jmcomic
+- img2pdf
 
 ## 使用方法
-1. 启动 QQ 机器人（ncatbot 框架）。
+1. 启动 QQ 机器人（NcatBot 框架）。
 2. 在群聊或私聊中发送：
    ```
    /jm <本子ID>

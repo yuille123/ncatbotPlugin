@@ -1,6 +1,6 @@
 # Plugin dependencies
-# Example: requests==2.28.1
+# Fixed versions based on current installation
 aiohttp
 jmcomic
 img2pdf
-ncatbot
+ncatbot==4.2.2.post4
