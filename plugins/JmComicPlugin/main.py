@@ -3,7 +3,7 @@ import jmcomic
 from ncatbot.plugin_system import NcatBotPlugin
 from ncatbot.plugin_system import command_registry
 from ncatbot.core.event import BaseMessageEvent
-from ncatbot.core import File
+from ncatbot.core import File, MessageChain
 
 class JmComicPlugin(NcatBotPlugin):
     name = "JmComicPlugin"
@@ -45,6 +45,7 @@ class JmComicPlugin(NcatBotPlugin):
         try:
             # 创建文件对象并发送
             pdf_file = File(pdf_path)
-            await event.reply(pdf_file)
+            message_chain = MessageChain([pdf_file])
+            await event.reply(message_chain)
         except Exception as e:
             await event.reply(f"发送文件失败: {str(e)}")
