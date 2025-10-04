@@ -1,7 +1,6 @@
 # Plugin dependencies
 # Example: requests==2.28.1
 aiohttp
-cryptography
 jmcomic
 img2pdf
 ncatbot

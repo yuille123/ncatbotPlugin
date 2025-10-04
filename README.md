@@ -26,15 +26,6 @@
 
 [📖 查看详细文档](./plugins/Lolicon/README.md)
 
-### [BilibiliParser](./plugins/BilibiliParser/README.md) 📺
-B站视频解析插件，支持BV/AV号/短链解析。
-
-**主要功能：**
-- 解析B站视频
-- 支持BV/AV号/短链
-- cookie存储至数据库
-
-[📖 查看详细文档](./plugins/BilibiliParser/README.md)
 
 ## 🛠️ 安装与配置
 
@@ -80,8 +71,6 @@ python main.py
 - `/r18 [数量] [标签]` - 发送R18图片(需权限)
 - 示例：`/loli 3 萝莉`、`/loli 白丝`
 
-### BilibiliParser命令
-- `/bparser_login` - 登录B站账号(私聊)
 
 
 ## 📝 注意事项
