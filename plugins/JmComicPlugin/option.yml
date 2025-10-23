@@ -2,15 +2,15 @@
 version: '2.0'
 
 dir_rule:
-  base_dir: stock
+  base_dir: C:\Users\吴\Desktop\new\tu
   rule: Bd_Atitle_Pindex
 
 client:
-  # domain:
-  #   - 18comic.vip
-  #   - 18comic.org
-  #   - 18comic-mygo.org
-  #   - 18comic-mygo.vip
+   domain:
+     - 18comic.vip
+     - 18comic.org
+     - 18comic-mygo.org
+     - 18comic-mygo.vip
   retry_times: 5
 
 download:
@@ -23,13 +23,13 @@ download:
     # 数值大，下得快，配置要求高，对禁漫压力大
     # 数值小，下得慢，配置要求低，对禁漫压力小
     # PS: 禁漫网页一般是一次请求50张图
-    batch_count: 45
+    batch_count: 20
 
 
 plugins:
   after_album:
     - plugin: img2pdf
       kwargs:
-        img_dir: stock
-        pdf_dir: pdf
+        img_dir: C:\Users\吴\Desktop\new\tu
+        pdf_dir: C:\Users\吴\Desktop\new\pdf
         filename_rule: Aid
